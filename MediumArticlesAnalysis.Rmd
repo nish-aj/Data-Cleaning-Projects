@@ -1,0 +1,165 @@
+---
+title: "Tidy_Tuesday_MediumArticlesAnalysis"
+output: html_notebook
+---
+
+
+### Read the dataset
+```{r}
+library(tidyverse)
+
+medium_dataset_csv <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-12-04/medium_datasci.csv")
+```
+
+```{r}
+medium_dataset_processed <- (medium_dataset_csv) %>% select(-x1) 
+```
+
+
+### display the count of top 10 publication
+```{r}
+medium_dataset_processed %>% count(publication, sort = TRUE) %>% head(10)
+
+```
+
+### Top 10 most popular author
+```{r}
+medium_dataset_processed %>% count(author, sort = TRUE) %>% head(10)
+```
+
+### aggregate the tags  & find the most common tags
+
+```{r}
+medium_dataset_processed %>% summarize_at(vars(starts_with("tag_")),sum)
+```
+### reshaping the above data
+```{r}
+medium_gathered <-medium_dataset_processed %>% 
+  gather(tag,value,starts_with("tag_")) %>%
+  mutate(tag = str_remove(tag,"tag_"))%>% 
+  filter(value == 1)
+
+medium_gathered %>% View
+medium_gathered %>% count(tag,sort = TRUE)
+```
+
+### find the most popular tag based on the number of claps
+
+```{r}
+medium_gathered %>% 
+  group_by(tag) %>%
+  summarize(median_claps = median(claps)) %>%
+  arrange(desc(median_claps))
+```
+
+### find the average number of claps for an article in towards data science
+```{r}
+
+medium_gathered %>% 
+  group_by(publication) %>%
+  filter(publication== "Towards Data Science") %>%
+  summarize(median_claps = median(claps)) %>%
+  arrange(desc(median_claps))
+```
+
+###find the most popular tag based on the number of claps
+```{r}
+medium_gathered %>%
+  group_by(tag) %>%
+  summarize(median_claps = median(claps)) %>%
+  arrange(desc(median_claps))
+```
+
+###distribution of claps
+```{r}
+medium_dataset_processed %>%
+  ggplot(aes(claps)) +
+  geom_histogram(binwidth = 0.08) +
+  scale_x_log10(labels = scales::comma_format())
+```
+
+
+### distribution of reading time
+```{r}
+medium_dataset_processed %>%
+  mutate(reading_time = pmin(14,reading_time)) %>%
+  ggplot(aes(reading_time)) +
+  geom_histogram(binwidth = 0.02) +
+  scale_x_log10(breaks =seq(2,14,2),
+                labels = c(seq(2,12,2),"14+")) +
+  labs(x = "Median Reading Time")
+
+```
+
+```{r}
+Q1 <- c(10,3,7,9)
+Q2 <- c(9,4,6,4)
+
+pmax(Q1,Q2) #parallel maxima
+```
+
+### reading time associated with various tags
+```{r}
+
+medium_gathered %>%
+  group_by(tag) %>%
+  summarize(reading_time = mean(reading_time)) %>%
+  arrange(desc(reading_time))
+
+
+```
+
+## Text Mining
+```{r}
+
+library(tidytext)
+words <- medium_dataset_processed %>% 
+  
+  filter(!is.na(title)) %>%  #removing missing data
+  unnest_tokens(word,title) %>% # tokenizing
+  anti_join(stop_words, by= "word") %>% # removing stop words
+  transmute(post_id = row_number(),subtitle,year,reading_time,claps,word) %>%
+  filter(word!= 'de',str_detect(word,'[a-z]')) 
+  
+ class(words) 
+```
+
+### Most Common words in medium post titles
+```{r}
+words %>%
+  count(word,sort = TRUE) %>%
+  head(20) %>%
+  mutate(word = fct_reorder(word,n)) %>%
+  ggplot(aes(word,n)) +
+  geom_col() +
+  coord_flip()+
+  xlab("Most Common words in medium post titles")
+```
+
+
+```{r}
+
+words %>%
+  add_count(word)%>% #adds a column with count of the word
+  filter(n>500) %>%
+  group_by(word) %>%
+  summarize(median_claps = median(claps),
+            geometric_mean_claps = exp(mean(log(claps +1))),
+            occurences = n()) %>%
+  arrange(desc(median_claps)) 
+
+
+```
+
+The words that got the most claps were 'tensorflow,building,guide,deep learning, neural networks'
+and the words that got the least no of claps were 'marketing, trends' and so on
+
+```{r}
+rm(medium_dataset_processed)
+rm(medium_gathered)
+rm(medium_dataset_csv)
+rm(Q1) 
+rm(Q2)
+gc()  
+```
+
